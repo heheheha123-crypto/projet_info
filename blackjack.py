@@ -371,3 +371,168 @@ def dessiner_carte(canvas, c):
         canvas.create_text(W_CARTE//2, H_CARTE//2, text=symbole, font=("Arial", 18), fill=couleur_texte)
         # la valeur en bas a droite
         canvas.create_text(W_CARTE-10, H_CARTE-12, text=c["valeur"], font=("Arial", 8, "bold"), fill=couleur_texte)
+
+
+
+def activer_boutons():
+    btn_carte.config(state="normal", bg="#4caf50")
+    btn_rester.config(state="normal", bg="#2196f3")
+    btn_double.config(state="normal", bg=ORANGE)
+    btn_split.config(state="normal", bg=VIOLET)
+    btn_abandonner.config(state="normal", bg="#f44336")
+
+    j = joueur_courant(jeu)
+    m = main_active(jeu)
+    mise = j["mises"][j["main_active"]]
+
+    # double seulement si solde suffisant
+    peut_double = j["solde"] >= mise
+    btn_double.config(state="normal" if peut_double else "disabled", bg=ORANGE if peut_double else GRIS)
+
+    # split seulement si 2 cartes identiques et solde suffisant
+    peut_split = (len(m) == 2 and m[0]["valeur"] == m[1]["valeur"] and j["solde"] >= mise)
+    btn_split.config(state="normal" if peut_split else "disabled", bg=VIOLET if peut_split else GRIS)
+
+def desactiver_boutons():
+    for btn in [btn_carte, btn_rester, btn_double, btn_split, btn_abandonner]:
+        btn.config(state="disabled", bg=GRIS)
+
+
+def rafraichir():
+    # on efface les anciennes cartes du croupier
+    for widget in frame_cartes_croupier.winfo_children():
+        widget.destroy()
+
+    # on efface la zone joueurs
+    for widget in frame_joueurs.winfo_children():
+        widget.destroy()
+
+    # on redessine les cartes du croupier
+    for c in jeu["main_croupier"]:
+        canvas = tk.Canvas(frame_cartes_croupier, width=W_CARTE, height=H_CARTE, bg=VERT, highlightthickness=0)
+        canvas.pack(side="left", padx=3)
+        dessiner_carte(canvas, c)
+
+    label_score_croupier.config(text="croupier  -  score : " + str(score_visible_croupier(jeu["main_croupier"])))
+
+    idx_actif = jeu["joueur_actif"]
+    for ji, j in enumerate(jeu["joueurs"]):
+        est_actif = (jeu["etat"] == "joue" and ji == idx_actif)
+        fond = "#2a6e3f" if est_actif else VERT_FONCE
+        bordure = JAUNE if est_actif else VERT_FONCE
+
+        frame_j = tk.Frame(frame_joueurs, bg=fond, highlightbackground=bordure, highlightthickness=2, padx=5, pady=3)
+        frame_j.pack(fill="x", padx=4, pady=2)
+
+        tk.Label(frame_j, text=j["nom"] + "  -  solde : " + str(j["solde"]) + " €",
+                 font=("Arial", 10, "bold"), bg=fond, fg=JAUNE if est_actif else BLANC).pack(anchor="w")
+
+        for mi, m in enumerate(j["mains"]):
+            est_main_active = est_actif and mi == j["main_active"]
+            mise = j["mises"][mi] if mi < len(j["mises"]) else 0
+            tag = " <<" if est_main_active else ""
+
+            frame_main = tk.Frame(frame_j, bg=fond)
+            frame_main.pack(anchor="w")
+
+            tk.Label(frame_main,
+                     text="  Main " + str(mi+1) + "  mise : " + str(mise) + " €  score : " + str(score_main(m)) + tag,
+                     font=("Arial", 9), bg=fond, fg=JAUNE if est_main_active else "#aaaaaa").pack(anchor="w")
+
+            frame_cartes = tk.Frame(frame_main, bg=fond)
+            frame_cartes.pack(anchor="w")
+            for c in m:
+                cv = tk.Canvas(frame_cartes, width=W_CARTE, height=H_CARTE, bg=fond, highlightthickness=0)
+                cv.pack(side="left", padx=2, pady=2)
+                dessiner_carte(cv, c)
+
+        # resultats si la partie est finie
+        if jeu["etat"] == "fini" and j["nom"] in jeu["resultats"]:
+            for res in jeu["resultats"][j["nom"]]:
+                coul = {"Gagne": "#69f0ae", "Blackjack !": JAUNE, "Perdu": "#ff5252", "Egalite": BLANC}.get(res, BLANC)
+                tk.Label(frame_j, text=res, font=("Arial", 11, "bold"), bg=fond, fg=coul).pack(anchor="w")
+
+    # on active ou desactive les boutons selon letat du jeu
+    if jeu["etat"] == "joue":
+        activer_boutons()
+        label_resultat.config(text="")
+    elif jeu["etat"] == "fini":
+        desactiver_boutons()
+        label_resultat.config(text="")
+        for j in jeu["joueurs"]:
+            sauvegarder_score(j["nom"], soldes_initiaux.get(j["nom"], SOLDE_INITIAL), j["solde"])
+
+
+# phase de mises
+
+def afficher_phase_mises():
+    global spin_mises
+    for w in frame_mises.winfo_children():
+        w.destroy()
+    spin_mises = {}
+
+    tk.Label(frame_mises, text="Placez vos mises :", font=("Arial", 11, "bold"), bg=VERT_FONCE, fg=JAUNE).grid(row=0, column=0, columnspan=2, pady=(4, 6))
+
+    for i, j in enumerate(jeu["joueurs"]):
+        tk.Label(frame_mises, text=j["nom"] + "  (solde : " + str(j["solde"]) + " €)", font=("Arial", 10), bg=VERT_FONCE, fg=BLANC).grid(row=i+1, column=0, sticky="e", padx=8, pady=2)
+        spin = tk.Spinbox(frame_mises, from_=10, to=min(j["solde"], 500), increment=10, width=6, font=("Arial", 10), justify="center")
+        spin.delete(0, "end")
+        spin.insert(0, "50")
+        spin.grid(row=i+1, column=1, padx=8, pady=2)
+        spin_mises[j["nom"]] = spin
+
+    tk.Button(frame_mises, text="Distribuer", font=("Arial", 10, "bold"), bg=JAUNE, fg=NOIR, relief="flat", command=valider_mises).grid(row=len(jeu["joueurs"])+1, column=0, columnspan=2, pady=8, padx=16, sticky="ew")
+
+    desactiver_boutons()
+    label_resultat.config(text="")
+
+def valider_mises():
+    for j in jeu["joueurs"]:
+        try:
+            mise = int(spin_mises[j["nom"]].get())
+        except ValueError:
+            mise = 50
+        mise = max(10, min(mise, j["solde"]))
+        j["mises"].append(mise)
+        j["solde"] -= mise
+
+    for w in frame_mises.winfo_children():
+        w.destroy()
+
+    placer_mises(jeu)
+    rafraichir()
+
+
+#fonctions des boutons
+
+def clic_carte():
+    joueur_carte(jeu)
+    rafraichir()
+
+def clic_rester():
+    joueur_reste(jeu)
+    rafraichir()
+
+def clic_double():
+    joueur_double(jeu)
+    rafraichir()
+
+def clic_abandonner():
+    joueur_abandonne(jeu)
+    rafraichir()
+
+def clic_split():
+    joueur_split(jeu)
+    rafraichir()
+
+def clic_nouvelle_partie():
+    nouvelle_partie(jeu)
+    for widget in frame_cartes_croupier.winfo_children():
+        widget.destroy()
+    for widget in frame_joueurs.winfo_children():
+        widget.destroy()
+    label_score_croupier.config(text="croupier  -  score : 0")
+    label_resultat.config(text="")
+    desactiver_boutons()
+    afficher_phase_mises()
+

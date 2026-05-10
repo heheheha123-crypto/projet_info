@@ -535,4 +535,177 @@ def clic_nouvelle_partie():
     label_resultat.config(text="")
     desactiver_boutons()
     afficher_phase_mises()
+# ecran d accueil
+
+def ecran_accueil():
+    dlg = tk.Toplevel(fenetre)
+    dlg.title("Joueurs")
+    dlg.configure(bg=VERT_FONCE)
+    dlg.grab_set()
+    dlg.resizable(False, False)
+
+    tk.Label(dlg, text="Nombre de joueurs :", font=("Arial", 11), bg=VERT_FONCE, fg=BLANC).grid(row=0, column=0, padx=16, pady=(14, 4), sticky="w")
+
+    spin_nb = tk.Spinbox(dlg, from_=1, to=4, width=4, font=("Arial", 11), justify="center")
+    spin_nb.grid(row=0, column=1, padx=8, pady=(14, 4))
+    spin_nb.delete(0, "end")
+    spin_nb.insert(0, "1")
+
+    frame_noms = tk.Frame(dlg, bg=VERT_FONCE)
+    frame_noms.grid(row=1, column=0, columnspan=2, padx=16, pady=4)
+    entries_noms = []
+
+    def maj_noms(*_):
+        for w in frame_noms.winfo_children():
+            w.destroy()
+        entries_noms.clear()
+        try:
+            nb = max(1, min(4, int(spin_nb.get())))
+        except ValueError:
+            nb = 1
+        for i in range(nb):
+            tk.Label(frame_noms, text="Joueur " + str(i+1) + " :", font=("Arial", 10), bg=VERT_FONCE, fg=BLANC).grid(row=i, column=0, sticky="e", pady=2)
+            e = tk.Entry(frame_noms, font=("Arial", 10), width=14)
+            e.insert(0, "Joueur " + str(i+1))
+            e.grid(row=i, column=1, padx=8, pady=2)
+            entries_noms.append(e)
+
+    spin_nb.config(command=maj_noms)
+    spin_nb.bind("<KeyRelease>", maj_noms)
+    maj_noms()
+
+    def valider():
+        noms = [e.get().strip() or "Joueur " + str(i+1) for i, e in enumerate(entries_noms)]
+        dlg.destroy()
+        demarrer_session(noms)
+
+    tk.Button(dlg, text="Commencer", font=("Arial", 11, "bold"), bg=JAUNE, fg=NOIR, relief="flat", command=valider).grid(row=2, column=0, columnspan=2, pady=14, padx=16, sticky="ew")
+    dlg.wait_window()
+
+def demarrer_session(noms):
+    global jeu, soldes_initiaux
+    joueurs = []
+    for nom in noms:
+        # on conserve le solde si le joueur existait deja
+        if jeu and any(j["nom"] == nom for j in jeu["joueurs"]):
+            solde = next(j["solde"] for j in jeu["joueurs"] if j["nom"] == nom)
+        else:
+            solde = SOLDE_INITIAL
+        joueurs.append(creer_joueur(nom, solde))
+
+    soldes_initiaux = {j["nom"]: j["solde"] for j in joueurs}
+    jeu = creer_partie(joueurs)
+    nouvelle_partie(jeu)
+    for widget in frame_cartes_croupier.winfo_children():
+        widget.destroy()
+    for widget in frame_joueurs.winfo_children():
+        widget.destroy()
+    label_score_croupier.config(text="croupier  -  score : 0")
+    label_resultat.config(text="")
+    desactiver_boutons()
+    afficher_phase_mises()
+
+
+# tableau des scores
+
+def voir_scores():
+    scores = charger_scores()
+    dlg = tk.Toplevel(fenetre)
+    dlg.title("Tableau des scores")
+    dlg.configure(bg=VERT_FONCE)
+    dlg.resizable(False, False)
+
+    tk.Label(dlg, text="Tableau des scores", font=("Arial", 14, "bold"), bg=VERT_FONCE, fg=JAUNE).pack(pady=(10, 4))
+
+    if not scores:
+        tk.Label(dlg, text="Aucun score enregistre.", font=("Arial", 10), bg=VERT_FONCE, fg=BLANC).pack(padx=24, pady=10)
+    else:
+        frame_t = tk.Frame(dlg, bg=VERT_FONCE)
+        frame_t.pack(padx=16, pady=6)
+        for col, ent in enumerate(["Joueur", "Gain", "Solde final"]):
+            tk.Label(frame_t, text=ent, font=("Arial", 10, "bold"), bg=VERT_FONCE, fg=JAUNE, width=14, anchor="w").grid(row=0, column=col, padx=4, pady=2)
+        for row, s in enumerate(reversed(scores[-30:]), start=1):
+            gain = s.get("gain", 0)
+            coul_gain = "#69f0ae" if gain >= 0 else "#ff5252"
+            vals = [s.get("nom", ""), ("+" if gain >= 0 else "") + str(gain) + " €", str(s.get("solde", 0)) + " €"]
+            couls = [BLANC, coul_gain, BLANC]
+            for col, (val, coul) in enumerate(zip(vals, couls)):
+                tk.Label(frame_t, text=val, font=("Arial", 10), bg=VERT_FONCE, fg=coul, width=14, anchor="w").grid(row=row, column=col, padx=4, pady=1)
+
+    def effacer():
+        if messagebox.askyesno("Effacer", "Effacer tous les scores ?", parent=dlg):
+            if os.path.exists(FICHIER_SCORES):
+                os.remove(FICHIER_SCORES)
+            dlg.destroy()
+
+    tk.Button(dlg, text="Effacer les scores", font=("Arial", 10), bg="#b71c1c", fg=BLANC, relief="flat", command=effacer).pack(pady=(4, 10))
+
+
+#Parties de linterface
+
+fenetre = tk.Tk()
+fenetre.title("Blackjack")
+fenetre.configure(bg=VERT_FONCE)
+fenetre.resizable(False, False)
+
+# titre en haut
+tk.Label(fenetre, text="BLACKJACK", font=("Arial", 20, "bold"), bg=VERT_FONCE, fg=JAUNE).pack(pady=(6, 2))
+
+# zone croupier
+frame_croupier = tk.Frame(fenetre, bg=VERT, padx=15, pady=10)
+frame_croupier.pack(fill="x", padx=20, pady=5)
+
+label_score_croupier = tk.Label(frame_croupier, text="croupier  -  score : 0", font=("Arial", 11), bg=VERT, fg=BLANC)
+label_score_croupier.pack(anchor="w")
+
+frame_cartes_croupier = tk.Frame(frame_croupier, bg=VERT)
+frame_cartes_croupier.pack(pady=3)
+
+# separateur
+tk.Frame(fenetre, bg=VERT_FONCE, height=3).pack(fill="x", padx=20)
+
+# zone joueurs (construite dynamiquement dans rafraichir)
+frame_joueurs = tk.Frame(fenetre, bg=VERT_FONCE)
+frame_joueurs.pack(fill="x", padx=10, pady=2)
+
+# label resultat (vide pendant la partie)
+label_resultat = tk.Label(fenetre, text="", font=("Arial", 16, "bold"), bg=VERT_FONCE, fg=JAUNE)
+label_resultat.pack(pady=2)
+
+# les boutons d action
+frame_boutons = tk.Frame(fenetre, bg=VERT_FONCE)
+frame_boutons.pack(pady=3)
+
+btn_carte = tk.Button(frame_boutons, text="Carte", font=("Arial", 10, "bold"), width=10, fg=BLANC, bg="#4caf50", relief="flat", command=clic_carte)
+btn_carte.grid(row=0, column=0, padx=6, pady=4)
+
+btn_rester = tk.Button(frame_boutons, text="Rester", font=("Arial", 10, "bold"), width=10, fg=BLANC, bg="#2196f3", relief="flat", command=clic_rester)
+btn_rester.grid(row=0, column=1, padx=6, pady=4)
+
+btn_double = tk.Button(frame_boutons, text="Double", font=("Arial", 10, "bold"), width=10, fg=BLANC, bg=ORANGE, relief="flat", command=clic_double)
+btn_double.grid(row=0, column=2, padx=6, pady=4)
+
+btn_split = tk.Button(frame_boutons, text="Split", font=("Arial", 10, "bold"), width=10, fg=BLANC, bg=VIOLET, relief="flat", command=clic_split)
+btn_split.grid(row=0, column=3, padx=6, pady=4)
+
+btn_abandonner = tk.Button(frame_boutons, text="Abandonner", font=("Arial", 10, "bold"), width=10, fg=BLANC, bg="#f44336", relief="flat", command=clic_abandonner)
+btn_abandonner.grid(row=0, column=4, padx=6, pady=4)
+
+# boutons de navigation
+frame_nav = tk.Frame(fenetre, bg=VERT_FONCE)
+frame_nav.pack(pady=4)
+
+tk.Button(frame_nav, text="Nouvelle partie", font=("Arial", 10, "bold"), bg=JAUNE, fg=NOIR, relief="flat", width=16, command=clic_nouvelle_partie).grid(row=0, column=0, padx=8)
+tk.Button(frame_nav, text="Scores", font=("Arial", 10, "bold"), bg="#37474f", fg=BLANC, relief="flat", width=10, command=voir_scores).grid(row=0, column=1, padx=8)
+tk.Button(frame_nav, text="Joueurs", font=("Arial", 10, "bold"), bg="#37474f", fg=BLANC, relief="flat", width=10, command=ecran_accueil).grid(row=0, column=2, padx=8)
+
+# zone mises (remplie dynamiquement)
+frame_mises = tk.Frame(fenetre, bg=VERT_FONCE)
+frame_mises.pack(pady=2)
+
+
+# lancement
+
+ecran_accueil()
+fenetre.mainloop()
 
